@@ -1,0 +1,52 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "pybq"
+version = "0.1.0"
+description = "Python bindings for binseq - high-performance BINSEQ file processing"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=2.2.6",
+    "pytest>=8.4.1",
+    "torch>=2.7.1",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+keywords = ["bioinformatics", "genomics", "binseq", "sequences"]
+authors = [
+  {name = "drbh", email = "david.richard.holtz@gmail.com"},
+]
+
+[project.optional-dependencies]
+numpy = ["numpy>=1.20.0"]
+test = [
+    "pytest>=7.0.0",
+    "pytest-benchmark>=4.0.0",
+    "numpy>=1.20.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-benchmark>=4.0.0",
+    "numpy>=1.20.0",
+    "maturin>=1.0,<2.0",
+]
+
+[tool.maturin]
+python-source = "python"
+module-name = "pybq._pybq"
+features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]

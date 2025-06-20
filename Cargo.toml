@@ -1,0 +1,16 @@
+[package]
+name = "pybq"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "pybq"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+binseq = "0.6.4"
+hex = "0.4"
+parking_lot = "0.12.4"
+memchr = "2.7.5"
+anyhow = "1.0.98"
