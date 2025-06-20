@@ -105,13 +105,3 @@ record.get_sequence()          # Decoded string
 record.data_ptr()             # Memory address
 record.shape()                # Array dimensions
 ```
-
-## Development
-
-Build and test the library locally.
-
-```bash
-uv sync
-uv run maturin develop --uv
-uv run pytest
-```
