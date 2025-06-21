@@ -1,6 +1,6 @@
-use pyo3::prelude::*;
 use crate::core::BqRecord;
 use crate::python::BqReader;
+use pyo3::prelude::*;
 
 /// Convenience function to open a BQ file
 #[pyfunction]
