@@ -254,3 +254,60 @@ For a reproducible sequence we rely on the `GCF_000001635.27_GRCm39_genomic` ass
 make download-mouse
 just encode-mouse
 ```
+
+### Comparing kmer counting speed
+
+**note** once you have a mouse VBA file, you can dump a 1:1 comparable FASTA file using the following command. This is helpful for debugging and validation since FASTA files may contain more information than BQ files so we want to ensure the comparisons are equivalent.
+
+```bash
+bqtools decode mouse.vbq -o mouse.fa
+```
+
+now the `.fa` file should have the same excact sequence as the `.vbq` file, but with the bq policy applied to any missing bases - ensuring that the sequences are identical. 
+
+also once you have both mouse files and the refernce tools jellyfish installed, you can run the following command to validate the sequences:
+
+```bash
+time sh ref-kmer.sh
+```
+
+```
+>12370989
+AAAA
+>8744579
+AAAC
+>11121426
+AAAG
+>12041417
+AAAT
+>9826286
+AACA
+sh ref-kmer.sh  784.61s user 1.54s system 680% cpu 1:55.46 total
+```
+
+and compare it with the pybq kmer count:
+
+```bash
+uv run optimal_kmer.py mouse.vbq
+```
+
+```
+pybq Fast K-mer Count
+====================
+Creating BQ reader for path: mouse.vbq
+Using 16 threads
+file: mouse.vbq
+records: 61
+AAAA: 12370989
+AAAC: 8744579
+AAAG: 11121426
+AAAT: 12041417
+AACA: 9826286
+AACC: 6803533
+AACG: 1174493
+AACT: 8293172
+AAGA: 10824039
+AAGC: 7599175
+
+Time: 8004.36 ms | K-mers: 256
+```
