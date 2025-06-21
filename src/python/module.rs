@@ -6,7 +6,14 @@ use crate::python::BqReader;
 #[pyfunction]
 #[pyo3(signature = (path, n_threads=1))]
 pub fn open_bq(path: &str, n_threads: Option<usize>) -> PyResult<BqReader> {
-    BqReader::new(path, n_threads)
+    BqReader::new(path, n_threads, false)
+}
+
+/// Convenience function to open a VBQ file
+#[pyfunction]
+#[pyo3(signature = (path, n_threads=1))]
+pub fn open_vbq(path: &str, n_threads: Option<usize>) -> PyResult<BqReader> {
+    BqReader::new(path, n_threads, true)
 }
 
 /// Hello function for testing
@@ -21,6 +28,7 @@ fn _pybq(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BqReader>()?;
     m.add_class::<BqRecord>()?;
     m.add_function(wrap_pyfunction!(open_bq, m)?)?;
+    m.add_function(wrap_pyfunction!(open_vbq, m)?)?;
     Ok(())
 }
 

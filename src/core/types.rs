@@ -63,6 +63,14 @@ impl BqRecord {
         dict.set_item("version", 3)?;
         Ok(dict)
     }
+
+    /// Compute population count (number of 1 bits) for this record
+    /// Works on the encoded sequence data
+    pub fn popcnt(&self) -> u64 {
+        self.encoded.iter()
+            .map(|&byte| byte.count_ones() as u64)
+            .sum()
+    }
 }
 
 impl BqRecord {
