@@ -55,7 +55,10 @@ impl BqRecord {
 
     /// Get array interface dict for NumPy compatibility
     #[getter]
-    pub fn __array_interface__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+    pub fn __array_interface__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
         let dict = pyo3::types::PyDict::new_bound(py);
         dict.set_item("data", (self.data_ptr(), false))?; // (ptr, read_only)
         dict.set_item("shape", self.shape())?;
@@ -68,18 +71,19 @@ impl BqRecord {
     /// Compute population count (number of 1 bits) for this record
     /// Works on the encoded sequence data
     pub fn popcnt(&self) -> u64 {
-        self.encoded.iter()
+        self.encoded
+            .iter()
             .map(|&byte| byte.count_ones() as u64)
             .sum()
     }
 
-    /// Count k-mers in the sequence
+    /// Count k-mers in the sequence (optimized for speed)
     /// Returns a HashMap with k-mers as keys and their counts as values
-    /// This is a simple, non-optimized implementation
+    /// Uses byte slices internally and only converts to strings at the end
     pub fn kmers(&self, k: usize) -> PyResult<HashMap<String, usize>> {
         if k == 0 {
             return Err(pyo3::exceptions::PyValueError::new_err(
-                "k must be greater than 0"
+                "k must be greater than 0",
             ));
         }
 
@@ -87,15 +91,32 @@ impl BqRecord {
             return Ok(HashMap::new());
         }
 
-        let mut kmer_counts = HashMap::new();
-        
-        // Simple sliding window approach
-        for i in 0..=(self.sequence.len() - k) {
-            let kmer = &self.sequence[i..i + k];
-            *kmer_counts.entry(kmer.to_string()).or_insert(0) += 1;
+        // Use byte slices as keys to avoid string allocations during counting
+        let mut kmer_counts: HashMap<&[u8], usize> = HashMap::with_capacity(
+            // Rough estimate of unique k-mers (4^k for DNA, but cap it reasonably)
+            std::cmp::min(1 << (2 * k), self.sequence.len() - k + 1),
+        );
+
+        let seq_bytes = self.sequence.as_bytes();
+
+        // Count using byte slice references (no allocations)
+        for i in 0..=(seq_bytes.len() - k) {
+            let kmer_slice = &seq_bytes[i..i + k];
+            *kmer_counts.entry(kmer_slice).or_insert(0) += 1;
         }
 
-        Ok(kmer_counts)
+        // Only convert to strings at the end
+        let result = kmer_counts
+            .into_iter()
+            .map(|(slice, count)| {
+                // SAFETY: We know the original sequence was valid UTF-8 (String),
+                // so any slice of it is also valid UTF-8
+                let kmer_string = unsafe { std::str::from_utf8_unchecked(slice) }.to_string();
+                (kmer_string, count)
+            })
+            .collect();
+
+        Ok(result)
     }
 
     /// Count k-mers and return the total number of unique k-mers
@@ -107,11 +128,12 @@ impl BqRecord {
     /// Get the most frequent k-mer
     pub fn most_frequent_kmer(&self, k: usize) -> PyResult<Option<(String, usize)>> {
         let kmers = self.kmers(k)?;
-        
-        let max_entry = kmers.iter()
+
+        let max_entry = kmers
+            .iter()
             .max_by_key(|(_, &count)| count)
             .map(|(kmer, &count)| (kmer.clone(), count));
-        
+
         Ok(max_entry)
     }
 }
@@ -131,14 +153,16 @@ mod tests {
     fn test_kmers_basic() {
         let record = BqRecord::new("ATCGATCG".to_string(), vec![]);
         let kmers = record.kmers(3).unwrap();
-        
+
         let expected = vec![
             ("ATC".to_string(), 2),
             ("TCG".to_string(), 2),
             ("CGA".to_string(), 1),
             ("GAT".to_string(), 1),
-        ].into_iter().collect::<HashMap<_, _>>();
-        
+        ]
+        .into_iter()
+        .collect::<HashMap<_, _>>();
+
         assert_eq!(kmers, expected);
     }
 
@@ -174,7 +198,7 @@ mod tests {
     fn test_most_frequent_kmer() {
         let record = BqRecord::new("ATCGATCG".to_string(), vec![]);
         let most_frequent = record.most_frequent_kmer(3).unwrap();
-        
+
         // Either "ATC" or "TCG" should be returned (both have count 2)
         assert!(most_frequent.is_some());
         let (kmer, count) = most_frequent.unwrap();

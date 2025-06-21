@@ -1,9 +1,9 @@
 use std::fs::File;
 use std::io::BufReader;
 
-use binseq::{ParallelReader, BinseqRecord, ParallelProcessor};
+use crate::core::{BqRecord, GrepCounter, KmerCounter, PopcntCounter, RecordCounter};
 use binseq::vbq::MmapReader as VbqReader;
-use crate::core::{BqRecord, GrepCounter, PopcntCounter, RecordCounter};
+use binseq::{BinseqRecord, ParallelProcessor, ParallelReader};
 
 // Constants for nucleotide mapping
 const NUCLEOTIDE_A: u8 = 65; // ASCII 'A'
@@ -67,7 +67,12 @@ impl ReaderVariant {
     }
 
     /// Count pattern matches using parallel processing
-    pub fn count_matches(&self, path: &str, pattern: &[u8], n_threads: usize) -> Result<usize, ReaderError> {
+    pub fn count_matches(
+        &self,
+        path: &str,
+        pattern: &[u8],
+        n_threads: usize,
+    ) -> Result<usize, ReaderError> {
         let counter = GrepCounter::new(pattern);
         self.process_parallel(path, counter.clone(), n_threads)?;
         Ok(counter.count())
@@ -80,8 +85,51 @@ impl ReaderVariant {
         Ok(counter.total_count())
     }
 
+    /// Count k-mers using parallel processing
+    ///
+    /// This method provides direct access to k-mer counting at the ReaderVariant level.
+    /// It's used internally by the BqReader's parallel k-mer methods.
+    pub fn count_kmers(
+        &self,
+        path: &str,
+        k: usize,
+        n_threads: usize,
+    ) -> Result<std::collections::HashMap<String, usize>, ReaderError> {
+        let counter = KmerCounter::new(k);
+        self.process_parallel(path, counter.clone(), n_threads)?;
+        Ok(counter.get_counts())
+    }
+
+    /// Get k-mer statistics using parallel processing
+    ///
+    /// Returns summary statistics without the full count dictionary for memory efficiency.
+    pub fn kmer_stats(
+        &self,
+        path: &str,
+        k: usize,
+        n_threads: usize,
+    ) -> Result<(usize, usize, Option<(String, usize)>), ReaderError> {
+        let counter = KmerCounter::new(k);
+        self.process_parallel(path, counter.clone(), n_threads)?;
+
+        let unique_count = counter.unique_kmer_count();
+        let total_count = counter.total_kmer_count();
+        let most_frequent = counter.most_frequent_kmer();
+
+        Ok((unique_count, total_count, most_frequent))
+    }
+
     /// Generic parallel processing method
-    fn process_parallel<T>(&self, path: &str, processor: T, n_threads: usize) -> Result<(), ReaderError>
+    ///
+    /// This is the core method that handles parallel processing for any type
+    /// that implements ParallelProcessor. It automatically handles both
+    /// Standard BQ and VBQ file formats.
+    pub fn process_parallel<T>(
+        &self,
+        path: &str,
+        processor: T,
+        n_threads: usize,
+    ) -> Result<(), ReaderError>
     where
         T: ParallelProcessor + Clone + 'static,
     {
@@ -89,13 +137,15 @@ impl ReaderVariant {
             ReaderVariant::Standard { .. } => {
                 let reader = binseq::BinseqReader::new(path)
                     .map_err(|e| ReaderError::Binseq(format!("Failed to open BQ file: {}", e)))?;
-                reader.process_parallel(processor, n_threads)
+                reader
+                    .process_parallel(processor, n_threads)
                     .map_err(|e| ReaderError::Runtime(format!("Processing failed: {}", e)))?;
             }
             ReaderVariant::Vbq { .. } => {
                 let reader = VbqReader::new(path)
                     .map_err(|e| ReaderError::Binseq(format!("Failed to open VBQ file: {}", e)))?;
-                reader.process_parallel(processor, n_threads)
+                reader
+                    .process_parallel(processor, n_threads)
                     .map_err(|e| ReaderError::Runtime(format!("Processing failed: {}", e)))?;
             }
         }
@@ -114,24 +164,33 @@ impl ReaderVariant {
                 if let Some(ref mut reader) = stream_reader {
                     match reader.next_record() {
                         Some(Ok(record)) => Ok(Some(Self::decode_record(record)?)),
-                        Some(Err(e)) => Err(ReaderError::Runtime(format!("Error reading record: {}", e))),
+                        Some(Err(e)) => {
+                            Err(ReaderError::Runtime(format!("Error reading record: {}", e)))
+                        }
                         None => Ok(None),
                     }
                 } else {
-                    Err(ReaderError::Runtime("Stream reader not initialized".to_string()))
+                    Err(ReaderError::Runtime(
+                        "Stream reader not initialized".to_string(),
+                    ))
                 }
             }
-            ReaderVariant::Vbq { reader, block, block_position } => {
+            ReaderVariant::Vbq {
+                reader,
+                block,
+                block_position,
+            } => {
                 // Initialize block if needed
                 if block.is_none() {
                     let mut new_block = reader.new_block();
-                    let has_data = reader.read_block_into(&mut new_block)
-                        .map_err(|e| ReaderError::Runtime(format!("Failed to read VBQ block: {}", e)))?;
-                    
+                    let has_data = reader.read_block_into(&mut new_block).map_err(|e| {
+                        ReaderError::Runtime(format!("Failed to read VBQ block: {}", e))
+                    })?;
+
                     if !has_data || new_block.n_records() == 0 {
                         return Ok(None);
                     }
-                    
+
                     *block = Some(new_block);
                     *block_position = 0;
                 }
@@ -139,9 +198,10 @@ impl ReaderVariant {
                 if let Some(ref mut current_block) = block {
                     // Check if we need to load the next block
                     if *block_position >= current_block.n_records() {
-                        let has_data = reader.read_block_into(current_block)
-                            .map_err(|e| ReaderError::Runtime(format!("Failed to read VBQ block: {}", e)))?;
-                        
+                        let has_data = reader.read_block_into(current_block).map_err(|e| {
+                            ReaderError::Runtime(format!("Failed to read VBQ block: {}", e))
+                        })?;
+
                         if !has_data || current_block.n_records() == 0 {
                             return Ok(None);
                         }
@@ -156,30 +216,36 @@ impl ReaderVariant {
                         Err(ReaderError::Runtime("VBQ record not found".to_string()))
                     }
                 } else {
-                    Err(ReaderError::Runtime("VBQ block not initialized".to_string()))
+                    Err(ReaderError::Runtime(
+                        "VBQ block not initialized".to_string(),
+                    ))
                 }
             }
         }
     }
 
     /// Create a stream reader for standard BQ files
-    fn create_stream_reader(path: &str) -> Result<binseq::bq::StreamReader<BufReader<File>>, ReaderError> {
+    fn create_stream_reader(
+        path: &str,
+    ) -> Result<binseq::bq::StreamReader<BufReader<File>>, ReaderError> {
         let file = File::open(path)?;
         let buf_reader = BufReader::new(file);
         let mut stream_reader = binseq::bq::StreamReader::new(buf_reader);
-        
-        stream_reader.read_header()
+
+        stream_reader
+            .read_header()
             .map_err(|e| ReaderError::Runtime(format!("Failed to read BQ header: {}", e)))?;
-        
+
         Ok(stream_reader)
     }
 
     /// Decode a standard BQ record
     fn decode_record(record: impl BinseqRecord) -> Result<BqRecord, ReaderError> {
         let mut sbuf = Vec::new();
-        record.decode_s(&mut sbuf)
+        record
+            .decode_s(&mut sbuf)
             .map_err(|e| ReaderError::Runtime(format!("Failed to decode record: {}", e)))?;
-        
+
         let sequence = Self::bytes_to_sequence(&sbuf);
         Ok(BqRecord::new(sequence, sbuf))
     }
@@ -187,22 +253,26 @@ impl ReaderVariant {
     /// Decode a VBQ record
     fn decode_vbq_record(record: impl BinseqRecord) -> Result<BqRecord, ReaderError> {
         let mut sbuf = Vec::new();
-        record.decode_s(&mut sbuf)
+        record
+            .decode_s(&mut sbuf)
             .map_err(|e| ReaderError::Runtime(format!("Failed to decode VBQ record: {}", e)))?;
-        
+
         let sequence = Self::bytes_to_sequence(&sbuf);
         Ok(BqRecord::new(sequence, sbuf))
     }
 
     /// Convert ASCII bytes to nucleotide sequence
     fn bytes_to_sequence(bytes: &[u8]) -> String {
-        bytes.iter().map(|&b| match b {
-            NUCLEOTIDE_A => 'A',
-            NUCLEOTIDE_C => 'C',
-            NUCLEOTIDE_G => 'G',
-            NUCLEOTIDE_T => 'T',
-            _ => 'N',
-        }).collect()
+        bytes
+            .iter()
+            .map(|&b| match b {
+                NUCLEOTIDE_A => 'A',
+                NUCLEOTIDE_C => 'C',
+                NUCLEOTIDE_G => 'G',
+                NUCLEOTIDE_T => 'T',
+                _ => 'N',
+            })
+            .collect()
     }
 
     /// Check if the reader is open

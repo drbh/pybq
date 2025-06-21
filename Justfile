@@ -4,4 +4,4 @@ download-mouse:
 
 encode-mouse:
     echo "Converting mouse genome to VBQ format..."
-    bqtools encode -B 62239136 -f a GCF_000001635.27_GRCm39_genomic.fna.gz -o mouse.vbq
+    bqtools encode -B 62239136 -p c -f a GCF_000001635.27_GRCm39_genomic.fna.gz -o mouse.vbq

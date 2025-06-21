@@ -50,25 +50,40 @@ with pybq.open_bq("file.bq") as reader:
 Multi-threaded processing scales with available CPU cores.
 
 ```bash
-python my_demo.py test.bq
+uv run demo.py test.vbq
 ```
 
 ```
-file         test.bq
-records      24,890
-size         995,632 bytes
-efficiency   40.0 bytes/record
+Creating BQ reader for path: test.vbq
+Using 1 threads
+file         test.vbq
+records      49,780
+size         445,271 bytes
+efficiency   8.9 bytes/record
 
-       A    24,890  100.0%      1ms
-       T    24,890  100.0%      1ms
-       G    24,890  100.0%      1ms
-       C    24,890  100.0%      1ms
-    ACGT    24,259   97.5%      2ms
+Creating BQ reader for path: test.vbq
+Using 1 threads
+       A    49,367   99.2%      5ms
+       T    49,354   99.1%      5ms
+       G    49,753   99.9%      5ms
+       C    49,316   99.1%      4ms
+    ACGT    26,589   53.4%      6ms
+    GGCC     8,566   17.2%      6ms
+    AATT     3,846    7.7%      6ms
+GGAATTCC        11    0.0%      8ms
 
-threads=1       2ms    1.0x
-threads=2       1ms    2.0x
-threads=4       1ms    3.4x
-threads=8       0ms    5.6x
+Creating BQ reader for path: test.vbq
+Using 1 threads
+threads=1       5ms    1.0x
+Creating BQ reader for path: test.vbq
+Using 2 threads
+threads=2       3ms    1.8x
+Creating BQ reader for path: test.vbq
+Using 4 threads
+threads=4       2ms    3.3x
+Creating BQ reader for path: test.vbq
+Using 8 threads
+threads=8       1ms    4.9x
 ```
 
 ## Array Integration
@@ -76,29 +91,132 @@ threads=8       0ms    5.6x
 Demonstrate zero-copy integration with scientific Python libraries.
 
 ```bash
-python np_demo.py test.bq
+uv run np_demo.py test.vbq
 ```
 
 ```
 pybq Array Integration
 ======================
-file: test.bq
-records: 24,890
+Creating BQ reader for path: test.vbq
+Using 1 threads
+file: test.vbq
+records: 49,780
 
-record 1: CGGTATTGTTAGCGCCGTCATTATCCAA
+record 1: CCAACTGGTGTGACCCTAGTTTATGGCT
   numpy: shape=(28,), dtype=uint8
-  data: [67 71 71 ... 65]
+  data: [67 67 65 ... 84]
   zero-copy: True
 
-batch: shape=(3, 28), mean=72.4
+record 2: ACGCGGTTAGCACGTACGAGCTGTGACTTGCTATGCACTCTTGTGCTTAGCTCTGAAACCCGGGTGAGCTCACCGCCCCCGGTCCTAGCA
+  numpy: shape=(90,), dtype=uint8
+  data: [65 67 71 ... 65]
+  zero-copy: True
+
+record 3: CGATGTTGTAAAGCGCTTTGATGTCTAA
+  numpy: shape=(28,), dtype=uint8
+  data: [67 71 65 ... 65]
+  zero-copy: True
 
 PyTorch Integration
 ===================
-record 1: CGGTATTGTT...
+Creating BQ reader for path: test.vbq
+Using 1 threads
+record 1: CCAACTGGTG...
   tensor: dtype=torch.uint8, shape=torch.Size([28])
-  sum: 2041
+  sum: 2047
+  memory shared: True
+
+record 2: ACGCGGTTAG...
+  tensor: dtype=torch.uint8, shape=torch.Size([90])
+  sum: 6451
   memory shared: True
 ```
+
+### Processing KMERs
+
+The fastest way to count K-mers in VBQ files is using the `optimal_kmer.py` script which relies on the `pybq` backend for efficient parallel processing.
+
+```bash
+uv run optimal_kmer.py test.vbq
+```
+
+```
+pybq Fast K-mer Count
+====================
+Creating BQ reader for path: test.vbq
+Using 16 threads
+file: test.vbq
+records: 49,780
+AAAA: 4512
+AAAC: 28211
+AAAG: 4609
+AAAT: 4058
+AACA: 8653
+AACC: 16963
+AACG: 9738
+AACT: 11579
+AAGA: 5073
+AAGC: 5751
+
+Time: 13.14 ms | K-mers: 256
+```
+
+we can try another approach that simply iterates over the records on the rust side
+
+```bash
+uv run rust_kmer.py test.vbq
+```
+
+```
+pybq Array Integration
+======================
+Creating BQ reader for path: test.vbq
+Using 16 threads
+file: test.vbq
+records: 49,780
+
+
+Full Kmer Count:
+AAAA: 4512
+AAAC: 28211
+AAAG: 4609
+AAAT: 4058
+AACA: 8653
+AACC: 16963
+AACG: 9738
+AACT: 11579
+AAGA: 5073
+AAGC: 5751
+
+Elapsed time: 688.98 ms
+```
+
+and another that iterates on the python side (which requires the most copies but may be faster in some small cases)
+
+```bash
+uv run py_kmer.py test.vbq
+```
+
+```
+uv run py_kmer.py test.vbq
+Counting k-mers of length 4 in file: test.vbq
+Creating BQ reader for path: test.vbq
+Using 16 threads
+Total unique k-mers: 256
+Total k-mer count: 2787680.00
+AAAA: 4512.00
+AAAC: 28211.00
+AAAG: 4609.00
+AAAT: 4058.00
+AACA: 8653.00
+AACC: 16963.00
+AACG: 9738.00
+AACT: 11579.00
+AAGA: 5073.00
+AAGC: 5751.00
+Elapsed time: 459.34 ms
+```
+
 
 ## API Reference
 

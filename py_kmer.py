@@ -12,8 +12,10 @@ def count_kmers(file_path, k):
     # scan = True
     scan = False
 
+    reader_class = pybq.open_vbq if file_path.endswith(".vbq") else pybq.open_bq
+
     # with pybq.open_vbq(file_path, n_threads=16) as reader:
-    with pybq.open_bq(file_path) as reader:
+    with reader_class(file_path, 16) as reader:
 
         if scan is False:
             for record in reader:
@@ -50,9 +52,17 @@ def count_kmers(file_path, k):
 
     return kmers
 
+import sys
+
+
+if len(sys.argv) != 2:
+    print("Usage: python np_demo.py <file.bq>", file=sys.stderr)
+    sys.exit(1)
+
+file_path = sys.argv[1]
 
 # Main execution
-file_path = "test.bq"
+# file_path = "test.bq"
 # file_path = "some.bq"
 # file_path = "ref.bq"
 # file_path = "output.vbq"
@@ -71,9 +81,15 @@ print(f"Total k-mer count: {sum(kmers.values()):.2f}")
 
 # sort alphabetically instead of by frequency
 sorted_kmers = sorted(kmers.items(), key=lambda x: x[0])
+
+i = 0
 # for kmer, count in sorted_kmers[:20]:
 for kmer, count in sorted_kmers:
     print(f"{kmer}: {count:.2f}")
+    i += 1
+    if i >= 10:
+        break
+
 
 end_time = time.perf_counter_ns()
 elapsed_time = (end_time - start_time) / 1_000_000  # convert to milliseconds

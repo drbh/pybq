@@ -19,8 +19,10 @@ file_path = sys.argv[1]
 print("pybq Array Integration")
 print("======================")
 
+reader_class = pybq.open_vbq if file_path.endswith(".vbq") else pybq.open_bq
+
 # Basic file info
-with pybq.open_bq(file_path) as reader:
+with reader_class(file_path) as reader:
     total = len(reader)
     print(f"file: {os.path.basename(file_path)}")
     print(f"records: {total:,}")
@@ -31,42 +33,45 @@ with pybq.open_bq(file_path) as reader:
     for i, record in enumerate(reader):
         if i >= 3:
             break
-        
+
         # Zero-copy to NumPy
         np_array = np.asarray(record)
         records.append(np_array)
-        
+
         print(f"record {i+1}: {record.get_sequence()}")
         print(f"  numpy: shape={np_array.shape}, dtype={np_array.dtype}")
         print(f"  data: [{np_array[0]} {np_array[1]} {np_array[2]} ... {np_array[-1]}]")
         print(f"  zero-copy: {np_array.ctypes.data == record.data_ptr()}")
         print()
 
-    # Batch processing
-    if records:
-        batch = np.stack(records)
-        print(f"batch: shape={batch.shape}, mean={batch.mean():.1f}")
-        print()
+    # TODO: we cant stack vbq without padding
+    # avoid for now
+    
+    # # Batch processing
+    # if records:
+    #     batch = np.stack(records)
+    #     print(f"batch: shape={batch.shape}, mean={batch.mean():.1f}")
+    #     print()
 
 # PyTorch test
 if HAS_TORCH:
     print("PyTorch Integration")
     print("===================")
-    
-    with pybq.open_bq(file_path) as reader:
+
+    with reader_class(file_path) as reader:
         for i, record in enumerate(reader):
             if i >= 2:
                 break
-                
+
             # Zero-copy chain: BqRecord -> NumPy -> PyTorch
             np_array = np.asarray(record)
             tensor = torch.from_numpy(np_array)
-            
+
             print(f"record {i+1}: {record.get_sequence()[:10]}...")
             print(f"  tensor: dtype={tensor.dtype}, shape={tensor.shape}")
             print(f"  sum: {tensor.sum().item()}")
             print(f"  memory shared: {tensor.data_ptr() == record.data_ptr()}")
             print()
-            
+
 else:
     print("PyTorch not available - install with: pip install torch")

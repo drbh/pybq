@@ -13,3 +13,5 @@ wheels/
 target
 .pytest_cache/
 *.so
+*.jf
+mer_counts_dumps.fa
