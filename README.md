@@ -125,3 +125,14 @@ record.popcnt()                 # Population count (1 bits)
 # Population Count
 reader.popcnt()                 # Total 1 bits in all sequences
 ```
+
+## Reproducible Data
+
+For a reproducible sequence we rely on the `GCF_000001635.27_GRCm39_genomic` assembly from NCBI, which is available in FASTA format. The following `make` or `just` command will download and convert it to BQ format:
+
+*note you can use `just` or `make` interchangeably, depending on your preference.*
+
+```bash
+make download-mouse
+just encode-mouse
+```
