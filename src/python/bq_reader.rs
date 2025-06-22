@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::core::{BqRecord, KmerCounter};
+use crate::core::{AlignmentCounter, AlignmentResult, BqRecord, KmerCounter};
 use crate::python::reader::{ReaderError, ReaderVariant};
 
 /// Error conversion for Python integration
@@ -270,6 +270,90 @@ impl BqReader {
 
             Ok(profile)
         })
+    }
+
+    /// Find the best alignment for a query sequence across all records in parallel
+    ///
+    /// This method searches through all records in the file in parallel to find
+    /// the best sliding window match for the given query sequence. This is much
+    /// faster than iterating through records sequentially.
+    ///
+    /// Args:
+    ///     query_sequence: The sequence to align against all records
+    ///
+    /// Returns:
+    ///     Dictionary with alignment results:
+    ///     - "record_index": Index of the record with the best match
+    ///     - "position": Position within the record where the best match starts
+    ///     - "distance": Hamming distance of the best match
+    ///     - "query_sequence": The query sequence that was aligned
+    ///     Returns None if no alignment was found
+    pub fn find_best_alignment_parallel(
+        &self,
+        query_sequence: String,
+    ) -> PyResult<Option<HashMap<String, PyObject>>> {
+        if query_sequence.is_empty() {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Query sequence cannot be empty",
+            ));
+        }
+
+        let reader = self.get_reader()?;
+
+        // Use the existing parallel processing infrastructure
+        match reader.find_best_alignment(&self.path, query_sequence.clone(), self.n_threads)? {
+            Some(result) => Python::with_gil(|py| {
+                let mut alignment_result = HashMap::new();
+
+                alignment_result
+                    .insert("record_index".to_string(), result.record_index.into_py(py));
+
+                alignment_result.insert("position".to_string(), result.best_position.into_py(py));
+
+                alignment_result.insert("distance".to_string(), result.best_distance.into_py(py));
+
+                alignment_result.insert("query_sequence".to_string(), query_sequence.into_py(py));
+
+                Ok(Some(alignment_result))
+            }),
+            None => Ok(None),
+        }
+    }
+
+    /// Find multiple good alignments for a query sequence in parallel
+    ///
+    /// This method is useful when you want to find not just the best match,
+    /// but several good matches across the file. Currently returns just the
+    /// best match, but can be extended to return top N matches.
+    ///
+    /// Args:
+    ///     query_sequence: The sequence to align against all records
+    ///     max_distance: Maximum allowed Hamming distance for a match
+    ///
+    /// Returns:
+    ///     List of alignment result dictionaries, sorted by distance (best first)
+    pub fn find_alignments_parallel(
+        &self,
+        query_sequence: String,
+        max_distance: usize,
+    ) -> PyResult<Vec<HashMap<String, PyObject>>> {
+        // For now, this just returns the best alignment if it meets the distance threshold
+        // This can be extended to collect multiple good alignments
+        match self.find_best_alignment_parallel(query_sequence)? {
+            Some(result) => Python::with_gil(|py| {
+                let distance = result
+                    .get("distance")
+                    .and_then(|d| d.extract::<usize>(py).ok())
+                    .unwrap_or(usize::MAX);
+
+                if distance <= max_distance {
+                    Ok(vec![result])
+                } else {
+                    Ok(vec![])
+                }
+            }),
+            None => Ok(vec![]),
+        }
     }
 
     /// Python len() support

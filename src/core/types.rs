@@ -18,9 +18,116 @@ impl BqRecord {
         Self::new(sequence, encoded)
     }
 
+    /// Create a BqRecord from a string sequence (2-bit encoding is done internally)
+    #[staticmethod]
+    pub fn from_sequence(sequence: String) -> Self {
+        // Simple 2-bit encoding: A=00, C=01, G=10, T=11
+        let mut encoded = Vec::with_capacity((sequence.len() + 3) / 4);
+        let mut byte = 0u8;
+        for (i, base) in sequence.bytes().enumerate() {
+            let bits = match base {
+                b'A' | b'a' => 0b00,
+                b'C' | b'c' => 0b01,
+                b'G' | b'g' => 0b10,
+                b'T' | b't' => 0b11,
+                _ => 0b00, // Treat unknowns as 'A'
+            };
+            byte |= bits << (6 - 2 * (i % 4));
+            if i % 4 == 3 {
+                encoded.push(byte);
+                byte = 0;
+            }
+        }
+        if sequence.len() % 4 != 0 {
+            encoded.push(byte);
+        }
+        Self::new(sequence, encoded)
+    }
+
     /// Get the decoded sequence as a string
     pub fn get_sequence(&self) -> &str {
         &self.sequence
+    }
+
+    /// Calculate hamming distance to another BqRecord
+    pub fn hamming_distance(&self, other: &BqRecord) -> PyResult<usize> {
+        if self.sequence.len() != other.sequence.len() {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Sequences must be of equal length to compute Hamming distance",
+            ));
+        }
+        // Use XOR to find differing bits
+        let distance = self
+            .encoded
+            .iter()
+            .zip(other.encoded.iter())
+            .map(|(&a, &b)| (a ^ b).count_ones() as usize)
+            .sum();
+        Ok(distance)
+    }
+
+    // /// Sliding window best match with another BqRecord
+    // pub fn sliding_window_best_match(&self, other: &BqRecord) -> PyResult<(usize, usize)> {
+    //     let len_self = self.sequence.len();
+    //     let len_other = other.sequence.len();
+    //     // the other sequence must be shorter than self
+    //     if len_other > len_self {
+    //         return Err(pyo3::exceptions::PyValueError::new_err(
+    //             "Other sequence must be shorter than or equal to self for sliding window match",
+    //         ));
+    //     }
+    //     let mut best_distance = usize::MAX;
+    //     let mut best_position = 0;
+    //     for i in 0..=(len_self - len_other) {
+    //         let window = &self.sequence[i..i + len_other];
+    //         let distance = window
+    //             .bytes()
+    //             .zip(other.sequence.bytes())
+    //             .filter(|(a, b)| a != b)
+    //             .count();
+    //         if distance < best_distance {
+    //             best_distance = distance;
+    //             best_position = i;
+    //         }
+    //     }
+    //     Ok((best_position, best_distance))
+    // }
+
+    /// Sliding window best match with another BqRecord
+    pub fn sliding_window_best_match(&self, other: &BqRecord) -> PyResult<(usize, usize)> {
+        let (longer_seq, shorter_seq, flip_result) = if self.sequence.len() >= other.sequence.len()
+        {
+            (&self.sequence, &other.sequence, false)
+        } else {
+            (&other.sequence, &self.sequence, true)
+        };
+
+        let len_longer = longer_seq.len();
+        let len_shorter = shorter_seq.len();
+
+        let mut best_distance = usize::MAX;
+        let mut best_position = 0;
+
+        for i in 0..=(len_longer - len_shorter) {
+            let window = &longer_seq[i..i + len_shorter];
+            let distance = window
+                .bytes()
+                .zip(shorter_seq.bytes())
+                .filter(|(a, b)| a != b)
+                .count();
+
+            if distance < best_distance {
+                best_distance = distance;
+                best_position = i;
+            }
+        }
+
+        // If we flipped the roles, return the position as if self was the shorter one
+        Ok(if flip_result {
+            (0, best_distance) // best position isn't meaningful if self is shorter
+        } else {
+            (best_position, best_distance)
+        })
     }
 
     /// Get the raw 2-bit encoded data as Python bytes

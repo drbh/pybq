@@ -7,5 +7,5 @@ pub mod core;
 pub mod python;
 
 // Re-export main types for convenience
-pub use core::{BqRecord, GrepCounter, KmerCounter, PopcntCounter, RecordCounter};
+pub use core::{BqRecord, GrepCounter, KmerCounter, PopcntCounter, RecordCounter, AlignmentCounter, AlignmentResult};
 pub use python::{BqReader, open_bq};

@@ -217,6 +217,65 @@ AAGC: 5751.00
 Elapsed time: 459.34 ms
 ```
 
+## Finding the most similar (alignment)
+
+```bash
+uv run py_align.py test.vbq
+```
+
+```
+<builtins.BqRecord object at 0x102be9ca0>
+ACGCGGTTAGCACGTAGCACAGTCTGCTTGCTATGCACTCTTGTGCTTAGCTCTGAAACTCGCACCCTCGCCTCCGCCCCGGTCCT
+105553149903040
+Creating BQ reader for path: test.vbq
+Using 32 threads
+New best distance: 17 at record 0
+New best distance: 13 at record 2
+New best distance: 13 at record 12
+New best distance: 13 at record 44
+New best distance: 12 at record 92
+New best distance: 12 at record 150
+New best distance: 11 at record 299
+New best distance: 11 at record 536
+New best distance: 11 at record 700
+New best distance: 10 at record 889
+New best distance: 10 at record 917
+New best distance: 10 at record 2986
+New best distance: 10 at record 5345
+New best distance: 10 at record 5568
+New best distance: 10 at record 5945
+New best distance: 9 at record 6199
+New best distance: 9 at record 6531
+New best distance: 6 at record 7091
+New best distance: 5 at record 11925
+New best distance: 4 at record 26351
+New best distance: 2 at record 35501
+New best distance: 0 at record 49763
+Processed 49780 records in 327.92 ms
+Throughput: 151805.05 records/second
+Best match: record 49763, position 0, distance 0
+```
+
+and we can do this much faster by skipping many of the decoding steps via
+
+```bash
+uv run optimal_align.py test.vbq
+```
+
+```
+pybq Fast Alignment
+===================
+Creating BQ reader for path: test.vbq
+Using 32 threads
+file: test.vbq
+records: 49,780
+query: ACGCGGTTAGCACGTAGCACAGTCTGCTTGCTATGCACTCTTGTGCTTAGCTCTGAAACTCGCACCCTCGCCTCCGCCCCGGTCCT
+Best match: record 49,763, position 0, distance 0
+
+Time: 6.51 ms
+Throughput: 7651790.35 records/second
+```
+
 
 ## API Reference
 

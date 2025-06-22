@@ -1,7 +1,10 @@
 use std::fs::File;
 use std::io::BufReader;
 
-use crate::core::{BqRecord, GrepCounter, KmerCounter, PopcntCounter, RecordCounter};
+use crate::core::{
+    AlignmentCounter, AlignmentResult, BqRecord, GrepCounter, KmerCounter, PopcntCounter,
+    RecordCounter,
+};
 use binseq::vbq::MmapReader as VbqReader;
 use binseq::{BinseqRecord, ParallelProcessor, ParallelReader};
 
@@ -117,6 +120,21 @@ impl ReaderVariant {
         let most_frequent = counter.most_frequent_kmer();
 
         Ok((unique_count, total_count, most_frequent))
+    }
+
+    /// Find best alignment using parallel processing
+    ///
+    /// Searches all records in parallel to find the best sliding window match
+    /// for the given query sequence.
+    pub fn find_best_alignment(
+        &self,
+        path: &str,
+        query_sequence: String,
+        n_threads: usize,
+    ) -> Result<Option<AlignmentResult>, ReaderError> {
+        let counter = AlignmentCounter::new(query_sequence);
+        self.process_parallel(path, counter.clone(), n_threads)?;
+        Ok(counter.get_best_result())
     }
 
     /// Generic parallel processing method
