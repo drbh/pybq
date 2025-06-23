@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use binseq::ParallelProcessor;
 use parking_lot::Mutex;
+use std::sync::Arc;
 
 /// Simple counter for counting all records in a BQ file
 #[derive(Clone)]

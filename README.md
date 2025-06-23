@@ -276,6 +276,38 @@ Time: 6.51 ms
 Throughput: 7651790.35 records/second
 ```
 
+## Get at index
+
+```bash
+uv run py_index.py test.vbq
+```
+
+```
+pybq Indexing Example
+====================
+Creating BQ reader for path: test.vbq
+Using 32 threads
+file: test.vbq
+records: 49,780
+
+Basic Indexing:
+--------------
+Accessing first record (index 0)...
+  Sequence: CCAACTGGTGTGACCCTAGTTTATGGCT...
+Accessing last record (index -1)...
+  Sequence: ACGCGGTTAGCACGTAACAACGGGAACTTGCTATGCACTCTTGTGCTTAG...
+Accessing record at index 4...
+  Sequence: TTTGCTGAGTAACGGTCAATCAGACAGA...
+
+Random access demo - accessing indices: 0, 2, 1
+  Record 0: CCAACTGGTGTGACCCTAGTTTATGGCT...
+  Record 2: CGATGTTGTAAAGCGCTTTGATGTCTAA...
+  Record 1: ACGCGGTTAGCACGTACGAGCTGTGACTTG...
+
+✓ Indexing allows random access to any record!
+✓ No need to iterate through all previous records!
+```
+
 
 ## API Reference
 

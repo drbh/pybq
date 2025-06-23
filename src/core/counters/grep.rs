@@ -1,7 +1,7 @@
-use std::sync::Arc;
 use binseq::ParallelProcessor;
 use memchr::memmem::Finder;
 use parking_lot::Mutex;
+use std::sync::Arc;
 
 /// Counter for parallel processing of BQ sequences
 /// Counts sequences matching a given pattern using multiple threads
@@ -56,7 +56,7 @@ impl ParallelProcessor for GrepCounter {
 
         // Decode the primary sequence
         record.decode_s(&mut self.sbuf)?;
-        
+
         // Decode the paired sequence if it exists
         if record.is_paired() {
             record.decode_x(&mut self.xbuf)?;

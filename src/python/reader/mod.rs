@@ -1,3 +1,3 @@
 pub mod variant;
 
-pub use variant::{ReaderVariant, ReaderError};
+pub use variant::{ReaderError, ReaderVariant};

@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use std::sync::Arc;
 use binseq::ParallelProcessor;
 use parking_lot::Mutex;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Counter for k-mer analysis across multiple sequences
 /// Counts k-mers in parallel across all records in a BQ file
@@ -37,7 +37,7 @@ impl KmerCounter {
 
         // Convert to string for simplicity (not optimized)
         let seq_str = String::from_utf8_lossy(sequence);
-        
+
         // Count k-mers using sliding window
         for i in 0..=(seq_str.len() - self.k) {
             let kmer = &seq_str[i..i + self.k];
@@ -62,7 +62,8 @@ impl KmerCounter {
 
     /// Get the most frequent k-mer
     pub fn most_frequent_kmer(&self) -> Option<(String, usize)> {
-        self.global_kmers.lock()
+        self.global_kmers
+            .lock()
             .iter()
             .max_by_key(|(_, &count)| count)
             .map(|(kmer, &count)| (kmer.clone(), count))
@@ -81,7 +82,7 @@ impl ParallelProcessor for KmerCounter {
 
         // Decode the primary sequence
         record.decode_s(&mut self.sbuf)?;
-        
+
         // Process the primary sequence - split the borrow to avoid conflicts
         if self.k > 0 && self.k <= self.sbuf.len() {
             let seq_str = String::from_utf8_lossy(&self.sbuf);
@@ -94,7 +95,7 @@ impl ParallelProcessor for KmerCounter {
         // Decode the paired sequence if it exists
         if record.is_paired() {
             record.decode_x(&mut self.xbuf)?;
-            
+
             // Process the paired sequence
             if self.k > 0 && self.k <= self.xbuf.len() {
                 let seq_str = String::from_utf8_lossy(&self.xbuf);
@@ -126,9 +127,9 @@ mod tests {
     fn test_kmer_counter_basic() {
         let mut counter = KmerCounter::new(3);
         let sequence = b"ATCGATCG";
-        
+
         counter.count_kmers_in_sequence(sequence);
-        
+
         // Check local counts before batch completion
         assert_eq!(counter.local_kmers.get("ATC"), Some(&2));
         assert_eq!(counter.local_kmers.get("TCG"), Some(&2));
@@ -140,7 +141,7 @@ mod tests {
     fn test_kmer_counter_empty() {
         let mut counter = KmerCounter::new(3);
         let sequence = b"";
-        
+
         counter.count_kmers_in_sequence(sequence);
         assert!(counter.local_kmers.is_empty());
     }
@@ -149,7 +150,7 @@ mod tests {
     fn test_kmer_counter_k_too_large() {
         let mut counter = KmerCounter::new(10);
         let sequence = b"ATCG";
-        
+
         counter.count_kmers_in_sequence(sequence);
         assert!(counter.local_kmers.is_empty());
     }

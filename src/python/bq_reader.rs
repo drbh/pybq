@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::core::{AlignmentCounter, AlignmentResult, BqRecord, KmerCounter};
+use crate::core::{BqRecord, KmerCounter};
 use crate::python::reader::{ReaderError, ReaderVariant};
 
 /// Error conversion for Python integration
@@ -17,7 +17,7 @@ impl From<ReaderError> for PyErr {
 }
 
 /// BQ file reader with Python integration
-/// Supports context manager protocol and iteration
+/// Supports context manager protocol, iteration, and indexing
 #[pyclass]
 pub struct BqReader {
     reader: Option<ReaderVariant>,
@@ -25,6 +25,7 @@ pub struct BqReader {
     current_index: usize,
     n_threads: usize,
     is_vbq: bool,
+    total_records: Option<usize>, // Cache total count
 }
 
 #[pymethods]
@@ -54,13 +55,49 @@ impl BqReader {
             current_index: 0,
             n_threads,
             is_vbq,
+            total_records: None,
         })
     }
 
     /// Get total number of records in the file
     pub fn len(&self) -> PyResult<usize> {
+        if let Some(total) = self.total_records {
+            return Ok(total);
+        }
+
         let reader = self.get_reader()?;
         Ok(reader.count_records(&self.path, self.n_threads)?)
+    }
+
+    /// Support indexing access like reader[4]
+    /// Returns the BqRecord at the specified index
+    pub fn __getitem__(&mut self, index: isize) -> PyResult<BqRecord> {
+        // Handle negative indexing
+        let total_len = self.len()?;
+        let actual_index = if index < 0 {
+            let positive_index = total_len as isize + index;
+            if positive_index < 0 {
+                return Err(PyErr::new::<pyo3::exceptions::PyIndexError, _>(
+                    "Index out of range",
+                ));
+            }
+            positive_index as usize
+        } else {
+            index as usize
+        };
+
+        if actual_index >= total_len {
+            return Err(PyErr::new::<pyo3::exceptions::PyIndexError, _>(
+                "Index out of range",
+            ));
+        }
+
+        // Need to read the record at the specific index
+        let path = self.path.clone();
+        let reader = self.get_reader()?;
+        let record = reader.get_record_at_index(&path, actual_index)?;
+
+        Ok(record)
     }
 
     /// Count records matching a specific pattern

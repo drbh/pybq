@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use binseq::ParallelProcessor;
 use parking_lot::Mutex;
+use std::sync::Arc;
 
 /// Counter for computing population count (number of 1 bits) on 2-bit encoded sequences
 /// Works directly on the encoded data without decoding to avoid memory allocations
@@ -24,7 +24,8 @@ impl PopcntCounter {
     /// Compute population count directly on 2-bit encoded data
     /// For 2-bit encoding, each byte contains 4 nucleotides
     fn compute_popcnt_2bit(&self, encoded_data: &[u8]) -> u64 {
-        encoded_data.iter()
+        encoded_data
+            .iter()
             .map(|&byte| byte.count_ones() as u64)
             .sum()
     }
@@ -50,16 +51,16 @@ impl ParallelProcessor for PopcntCounter {
     fn process_record<R: binseq::BinseqRecord>(&mut self, record: R) -> binseq::Result<()> {
         // Try to get direct access to encoded data if the record supports it
         // For now, we'll fall back to decoding since we need to check what methods are available
-        
+
         // Decode the primary sequence to get the encoded data
         let mut sbuf = Vec::<u8>::new();
         record.decode_s(&mut sbuf)?;
-        
+
         // The decoded sequence is in ASCII format, but we want the raw 2-bit encoded data
         // For now, we'll work with what we have and compute popcnt on the ASCII bytes
         // This is not optimal but demonstrates the concept
         self.local_popcnt += self.compute_popcnt_2bit(&sbuf);
-        
+
         // Handle paired sequence if it exists
         if record.is_paired() {
             let mut xbuf = Vec::<u8>::new();
@@ -85,11 +86,11 @@ mod tests {
     #[test]
     fn test_popcnt_basic() {
         let counter = PopcntCounter::new();
-        
+
         // Test basic popcnt computation
         let data = vec![0b11111111, 0b00000000, 0b10101010];
         let result = counter.compute_popcnt_2bit(&data);
-        
+
         // 8 + 0 + 4 = 12
         assert_eq!(result, 12);
     }
@@ -107,7 +108,7 @@ mod tests {
         let counter = PopcntCounter::new();
         *counter.total_popcnt.lock() = 42;
         assert_eq!(counter.total_count(), 42);
-        
+
         counter.reset();
         assert_eq!(counter.total_count(), 0);
     }

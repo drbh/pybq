@@ -137,6 +137,75 @@ impl ReaderVariant {
         Ok(counter.get_best_result())
     }
 
+    /// Get a record at a specific index
+    /// This is implemented by skipping records until we reach the desired index
+    pub fn get_record_at_index(&self, path: &str, index: usize) -> Result<BqRecord, ReaderError> {
+        match self {
+            ReaderVariant::Standard { .. } => {
+                let mut stream_reader = Self::create_stream_reader(path)?;
+                let mut current_index = 0;
+
+                while current_index <= index {
+                    match stream_reader.next_record() {
+                        Some(Ok(record)) => {
+                            if current_index == index {
+                                return Self::decode_record(record);
+                            }
+                            current_index += 1;
+                        }
+                        Some(Err(e)) => {
+                            return Err(ReaderError::Runtime(format!(
+                                "Error reading record: {}",
+                                e
+                            )));
+                        }
+                        None => {
+                            return Err(ReaderError::Runtime(format!(
+                                "Index {} out of bounds",
+                                index
+                            )));
+                        }
+                    }
+                }
+                Err(ReaderError::Runtime(format!(
+                    "Index {} out of bounds",
+                    index
+                )))
+            }
+            ReaderVariant::Vbq { .. } => {
+                let mut reader = VbqReader::new(path)
+                    .map_err(|e| ReaderError::Binseq(format!("Failed to open VBQ file: {}", e)))?;
+                let mut block = reader.new_block();
+                let mut current_index = 0;
+
+                while reader
+                    .read_block_into(&mut block)
+                    .map_err(|e| ReaderError::Runtime(format!("Failed to read VBQ block: {}", e)))?
+                    && block.n_records() > 0
+                {
+                    let block_end = current_index + block.n_records();
+
+                    if index < block_end {
+                        // The record is in this block
+                        let block_position = index - current_index;
+                        if let Some(record) = block.iter().nth(block_position) {
+                            return Self::decode_vbq_record(record);
+                        } else {
+                            return Err(ReaderError::Runtime("VBQ record not found".to_string()));
+                        }
+                    }
+
+                    current_index = block_end;
+                }
+
+                Err(ReaderError::Runtime(format!(
+                    "Index {} out of bounds",
+                    index
+                )))
+            }
+        }
+    }
+
     /// Generic parallel processing method
     ///
     /// This is the core method that handles parallel processing for any type
